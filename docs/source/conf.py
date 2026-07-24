@@ -32,7 +32,7 @@ autodoc_mock_imports = ["torch", "scipy", "numpy", "pandas", "sklearn"]
 copybutton_prompt_text = r">>> ?|\.\.\. ?"
 copybutton_prompt_is_regexp = True
 
-html_title = 'MuLaConf v. 0.2.0'
+html_title = 'MuLaConf v. 0.3.0'
 
 html_sidebars = {
     "**": []
