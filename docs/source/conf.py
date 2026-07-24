@@ -4,7 +4,7 @@ import sys
 project = 'MuLaConf'
 copyright = '2026, Kostas Katsios'
 author = 'Kostas Katsios'
-release = '0.2.0'
+release = '0.3.0'
 
 extensions = [  'sphinx.ext.autodoc',
                 'sphinx.ext.napoleon',
