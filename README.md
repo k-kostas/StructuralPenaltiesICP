@@ -57,10 +57,10 @@ For the complete documentation see [mulaconf.readthedocs.io](https://mulaconf.re
 This guide demonstrates the core usage of the MuLaConf package for a multi-label classification task 
 to produce prediction sets for a new test sample in different significance levels. 
 
-We will load the data,
-split it into proper training, calibration and test sets, train the model and evaluate the conformal predictions.
-For example, we will use the **Yeast** dataset after we have preprocessed the data into features and labels
-in CSV format. The labels are represented as **multi-hot vectors**.
+We will load the data, split it into proper training, calibration, and test sets, train the base model,
+and evaluate the conformal predictions. We will use the Yeast dataset as an example, which has been preprocessed
+into features and labels in CSV format. Note that the labels are represented as multi-hot vectors. 
+The following code snippets run directly if you have cloned the package repository.
 
 ```python
 import pandas as pd
@@ -365,8 +365,8 @@ print(metrics)
 > ```python
 > # Update parameters directly
 > icp.measure = 'norm'
-> icp.weight_hamming = 1.0
-> icp.weight_cardinality = 0.5
+> icp.weight_hamming = 2.0
+> icp.weight_cardinality = 1.5
 > 
 > # Recalibration happens automatically on the fly, so you can call the predict() method immediately.
 > updated_obj = predict(test_probs)

@@ -25,11 +25,13 @@ informative prediction sets.
 The package offers configurations across two main components:
 
 **1. Distance Measures**
+
 Used to calculate the base nonconformity scores:
 * **Mahalanobis:** Accounts for label correlations by forming the covariance matrix of the error vectors.
 * **Euclidean:** A standard, unweighted baseline distance metric.
 
 **2. Structural Penalties**
+
 Can be applied on top of the distance measures to further reduce the size of the prediction sets:
 * **Hamming Penalty:** Penalizes label combinations based on their minimum Hamming distance from the true label-sets
 found in the proper-training data.
@@ -38,7 +40,7 @@ from the expected cardinality of the proper-training set.
 
 
 ### Load and split data
-We will load the data, split it into proper-training, calibration and sets, train the model and evaluate the conformal
+We will load the data, split it into proper-training, calibration and test sets, train the model and evaluate the conformal
 predictions. For example, we will use the **Yeast** dataset after we have preprocessed the data into features and labels
 in CSV format.
 
@@ -46,12 +48,16 @@ in CSV format.
 The labels should be represented as **multi-hot vectors**.
 ~~~
 
+~~~{Note}
+The example works directly when the package is cloned.
+~~~
+
 ```python
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
 # 1. Define the path to your data
-data_path = "data/yeast"
+data_path = "/data/yeast"
 
 # 2. Load the Yeast dataset (Features and Labels)
 X = pd.read_csv(f"{data_path}/X_yeast.csv")
@@ -187,6 +193,8 @@ prediction_regions_obj = wrapper.predict(X_test)
 ```
 
 The predict method returns a PredictionRegions container holding the conformal prediction regions for each sample.
+By default, the predictor guarantees non-empty prediction sets by always including the label-set with the highest p-value.
+You can switch this behavior using the `non_empty_prediction_regions` boolean parameter (default `True`).
 You can query this object to extract valid label sets at a specific significance level
 (e.g., $\alpha=0.1$ for 90% confidence) or multiple levels (e.g., $\alpha=[0.05, 0.1, 0.2]$).
 
@@ -223,7 +231,7 @@ the new predictions.
 wrapper.measure = 'norm'
 wrapper.weight_hamming = 1.0
 wrapper.weight_cardinality = 0.5
-new_prediction_obj = wrapper.predict(test_probs)
+new_prediction_obj = wrapper.predict(X_test)
 new_prediction_sets = new_prediction_obj(significance_level=0.1)
 ```
 ~~~
@@ -243,7 +251,7 @@ tensor([0.0627, 0.0015, 0.0719,  ..., 0.0015, 0.0015, 0.0015])
 
 #### Evaluation
 The `evaluate` method provides a convenient way to calculate performance metrics, including Coverage, 
-N-Criterion, S-Criterion, and statistical validity via the KS-test. Additionally, it can return the p-values
+N-Criterion, S-Criterion, Observed Fuzziness and Observed Excess. Additionally, it can return the p-values
 corresponding to the true labels.
 
 ##### Arguments
@@ -256,7 +264,8 @@ metrics = prediction_regions_obj.evaluate(
     return_coverage=True,
     return_n_criterion=True,
     return_s_criterion=True,
-    return_ks_test=True,
+    return_observed_fuzziness=True,
+    return_observed_excess=True,
     true_labelsets=y_test,
     significance_level=0.1,
 )
@@ -266,20 +275,17 @@ print(metrics)
 
 ```text
 {
-'coverage': 0.9008264462809917,
- 'n_criterion': 858.8636363636364,
- 's_criterion': 412.99029541015625,
- 'ks_test_metrics': {
-                    'ks_statistic': np.float64(0.05622110017075027),
-                    'ks_p_value': np.float64(0.4135919018220534),
-                    'is_valid': np.True_
-                    }
- }
+    'coverage': 0.9008264541625977,
+    'n_criterion': 957.6694214876034,
+    'observed_excess': 956.7685950413223,
+    's_criterion': 457.9545593261719,
+    'observed_fuzziness': 457.46160888671875
+}
 ```
 
 ## Alternative usage
 You can also use the InductiveConformalPredictor class as a standalone engine if you prefer to manage the underlying
-classifier yourself or are not using Scikit-Learn. In this mode, you must provide the **predicted probabilities** for the
+classifier yourself or not using Scikit-Learn. In this mode, you must provide the **predicted probabilities** for the
 proper training, calibration, and test sets, as well as the **ground truth labels** for the training and calibration sets.
 
 The package is flexible regarding input formats: it accepts PyTorch Tensors, NumPy arrays, Pandas DataFrames/Series,
@@ -296,6 +302,7 @@ from mulaconf.icp_predictor import InductiveConformalPredictor
 icp = InductiveConformalPredictor(
     predicted_probabilities=train_probs,
     true_labels=train_labels,
+    measure='mahalanobis',
     weight_hamming=1.5,
     weight_cardinality=0.5,
     device='cpu'
@@ -318,7 +325,7 @@ and `weight_cardinality` at any time after the calibration process.
 The predictor utilizes lazy evaluation for automatic recalibration. This means
 you do not need to manually pass your calibration data again or explicitly call
 `calibrate()`. Simply assign new values to the properties (e.g., `icp.measure = 'norm'`,
-`icp.weight_hamming = 1.0`, `icp.weight_cardinality = 0.5`) and immediately call `calibrate()`. It will
+`icp.weight_hamming = 2.0`, `icp.weight_cardinality = 1.5`) and immediately call `calibrate()`. It will
 automatically reform the underlying covariance matrix and recalibrate the scores
 on-the-fly.
 
@@ -330,8 +337,8 @@ icp.calibrate()
 
 2. The `calibrate` method recalculates calibration scores after penalty weight update.
 ```python
-icp.weight_hamming = 1.0
-icp.weight_cardinality = 0.5
+icp.weight_hamming = 2.0
+icp.weight_cardinality = 1.5
 icp.calibrate()
 ```
 
@@ -339,8 +346,8 @@ icp.calibrate()
 and penalty weights.
 ```python 
 icp.measure = 'norm'
-icp.weight_hamming = 1.0
-icp.weight_cardinality = 0.5
+icp.weight_hamming = 2.0
+icp.weight_cardinality = 1.5
 icp.calibrate()
 ```
 ~~~
@@ -354,6 +361,8 @@ prediction_regions_obj = icp.predict(test_probs)
 ```
 
 The predict method returns a PredictionRegions container holding the conformal prediction regions for each sample.
+By default, the predictor guarantees non-empty prediction sets by always including the label-set with the highest p-value.
+You can switch this behavior using the `non_empty_prediction_regions` boolean parameter (default `True`).
 You can query this object to extract valid label sets at a specific significance level
 (e.g., $\alpha=0.1$ for 90% confidence) or multiple levels (e.g., $\alpha=[0.05, 0.1, 0.2]$).
 
@@ -388,8 +397,8 @@ the new predictions.
 
 ```python
 icp.measure = 'norm'
-icp.weight_hamming = 1.0
-icp.weight_cardinality = 0.5
+icp.weight_hamming = 2.0
+icp.weight_cardinality = 1.5
 new_prediction_obj = icp.predict(test_probs)
 new_prediction_sets = new_prediction_obj(significance_level=0.1)
 ```
@@ -411,7 +420,7 @@ tensor([0.0627, 0.0015, 0.0719,  ..., 0.0015, 0.0015, 0.0015])
 
 4. ### Evaluation Metrics
 The `evaluate` method provides a convenient way to calculate performance metrics, including Coverage, 
-N-Criterion, S-Criterion, and statistical validity via the KS-test. Additionally, it can return the p-values
+N-Criterion, S-Criterion, Observed Fuzziness and Observed Excess. Additionally, it can return the p-values
 corresponding to the true labels.
 
 **Arguments**
@@ -426,7 +435,8 @@ metrics = prediction_regions_obj.evaluate(
     return_coverage=True,
     return_n_criterion=True,
     return_s_criterion=True,
-    return_ks_test=True,
+    return_observed_fuzziness=True,
+    return_observed_excess=True,
     true_labelsets=y_test,
     significance_level=0.1,
 )
@@ -436,15 +446,12 @@ print(metrics)
 
 ```text
 {
-'coverage': 0.9008264462809917,
- 'n_criterion': 858.8636363636364,
- 's_criterion': 412.99029541015625,
- 'ks_test_metrics': {
-                    'ks_statistic': np.float64(0.05622110017075027),
-                    'ks_p_value': np.float64(0.4135919018220534),
-                    'is_valid': np.True_
-                    }
- }
+    'coverage': 0.9008264541625977,
+    'n_criterion': 957.6694214876034,
+    'observed_excess': 956.7685950413223,
+    's_criterion': 457.9545593261719,
+    'observed_fuzziness': 457.46160888671875
+}
 ```
 
 

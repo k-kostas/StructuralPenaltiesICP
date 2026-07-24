@@ -52,7 +52,7 @@ class InductiveConformalPredictor:
        required to hold multiple massive intermediate tensors simultaneously in memory
        during calculation.
 
-       Users can manually tune the hardware limits and performance toggles by modifying the module-level configuration
+       Users can manually tune the hardware limits by modifying the module-level configuration
        variables (located in ``constants.py``) to optimize for their specific CPU/GPU memory constraints:
 
        ``_CPU_MAX_COMBINATIONS``: Caps the maximum number of combinations processed at once during

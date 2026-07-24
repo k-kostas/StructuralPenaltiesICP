@@ -49,7 +49,7 @@ class PredictionRegions:
     >>> prediction_regions_obj = PredictionRegions(p_values, combinations)
     """
 
-    def __init__(self, p_values: torch.Tensor, combinations: torch.Tensor, non_empty_prediction_regions=True):
+    def __init__(self, p_values: torch.Tensor, combinations: torch.Tensor, non_empty_prediction_regions:bool=True):
         self.device = p_values.device
         self.p_values = p_values
         self.combinations = combinations.to(self.device)
