@@ -9,9 +9,14 @@ This folder contains runnable experiment scripts for benchmarking and reproducin
 
 ## Quick Start
 
-1. Open the script and set the dataset name (e.g., `yeast` or `tmc2007_500`). 
-    Also verify: calibration_size = 0.3.
-2. From the project root, run.
+1. Open the script and set the `dataset` name (e.g., `yeast` or `tmc2007_500`). 
+    Also verify: `calibration_size = 0.3`.
+2. The experiment uses **Repeated K-Fold cross-validation** with:
+- `n_splits = 10`
+- `n_repeats = 1`
+\
+So the default setup is **10-fold cross-validation** (10 total iterations).
+3. From the project root, run.
 
     ```bash
     python examples/scripts/running_experiments_presenting_results.py
@@ -27,6 +32,11 @@ This folder contains runnable experiment scripts for benchmarking and reproducin
 
 - Downloads X_<dataset>.csv and y_<dataset>.csv
 - Creates train/calibration/test splits within repeated CV
+Effective split sizes per fold:
+  - **Test size:** `1 / n_splits = 10%` of the full dataset
+  - Remaining **90%** is used as temporary training data, then split into:
+    - **Calibration size:** `calibration_size = 0.3` of that 90% (i.e., **27%** of full dataset)
+    - **Proper training size:** remaining **63%** of full dataset
 - Trains a base multi-label model (XGBoost via MultiOutputClassifier)
 - Benchmarks conformal prediction for:
   - measures: mahalanobis, norm
