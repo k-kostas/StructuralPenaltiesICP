@@ -24,7 +24,7 @@ dataset = ""
 calibration_size = 0.3
 
 # Download data from data folder on GitHub
-data_dir = os.path.join(os.getcwd(), f"data_testing/{dataset}")
+data_dir = os.path.join(os.getcwd(), f"data/{dataset}")
 os.makedirs(data_dir, exist_ok=True)
 
 base_url = f"https://raw.githubusercontent.com/k-kostas/MuLaConf/main/examples/data/{dataset}"
@@ -46,7 +46,7 @@ response_y.raise_for_status()
 with open(y_output_path, "wb") as f:
     f.write(response_y.content)
 
-out_dir = f"{dataset}_experiments_testing"
+out_dir = f"{dataset}_experiments"
 os.makedirs(out_dir, exist_ok=True)
 
 print(f"Loading {dataset} dataset...")
