@@ -27,7 +27,7 @@ calibration_size = 0.3
 data_dir = os.path.join(os.getcwd(), f"data_testing/{dataset}")
 os.makedirs(data_dir, exist_ok=True)
 
-base_url = f"https://raw.githubusercontent.com/k-kostas/MuLaConf/main/data/{dataset}"
+base_url = f"https://raw.githubusercontent.com/k-kostas/MuLaConf/main/examples/data/{dataset}"
 
 x_output_path = os.path.join(data_dir, f"X_{dataset}.csv")
 y_output_path = os.path.join(data_dir, f"y_{dataset}.csv")
