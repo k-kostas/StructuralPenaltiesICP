@@ -27,8 +27,9 @@ The package offers configurations across two main components:
 **1. Distance Measures**
 
 Used to calculate the base nonconformity scores:
-* **Mahalanobis:** Accounts for label correlations by forming the covariance matrix of the error vectors.
-* **Euclidean:** A standard, unweighted baseline distance metric.
+* **Mahalanobis:** Accounts for label correlations by estimating the covariance matrix of the error vectors
+using Ledoit-Wolf shrinkage.
+* **Euclidean Norm:** A standard, unweighted baseline distance metric.
 
 **2. Structural Penalties**
 
@@ -104,7 +105,7 @@ penalties for the inductive conformal predictor.
 When using meta-estimators (e.g., [`MultiOutputClassifier`](https://scikit-learn.org/stable/modules/generated/sklearn.multioutput.MultiOutputClassifier.html),
 [`ClassifierChain`](https://scikit-learn.org/stable/modules/generated/sklearn.multioutput.ClassifierChain.html),
 [`OneVsRestClassifier`](https://scikit-learn.org/stable/modules/generated/sklearn.multioutput.OneVsRestClassifier.html)),
-you can configure the base learnern's parameters in two ways:
+you can configure the base learner's parameters in two ways:
 
 1. Direct Initialization
    Initialize the inner classifier with its parameters before passing it to the wrapper.
@@ -161,8 +162,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.multioutput import ClassifierChain
 
 # Switch strategy to Classifier Chains with KNN
-wrapper.strategy = ClassifierChain(KNeighborsClassifier())
-wrapper.kwargs = {'estimator__n_neighbors': 5}
+wrapper.strategy = ClassifierChain(KNeighborsClassifier(n_neighbors=5))
 
 # Trigger automatic retraining and calibration
 wrapper.calibrate(X_calib, y_calib)
@@ -186,24 +186,17 @@ wrapper.calibrate()
 ### Predicting Valid Conformal Regions and Evaluation Metrics
 
 #### Prediction
-Finally, we generate prediction regions for the test set using the predict method.
-
-```python
-prediction_regions_obj = wrapper.predict(X_test)
-```
-
-The predict method returns a PredictionRegions container holding the conformal prediction regions for each sample.
-By default, the predictor guarantees non-empty prediction sets by always including the label-set with the highest p-value.
-You can switch this behavior using the `non_empty_prediction_regions` boolean parameter (default `True`).
-You can query this object to extract valid label sets at a specific significance level
+Finally, we call the `predict` method on the test set, which returns a `PredictionRegions` object. You can query this
+object to extract valid label-sets at a specific significance level
 (e.g., $\alpha=0.1$ for 90% confidence) or multiple levels (e.g., $\alpha=[0.05, 0.1, 0.2]$).
-
 The label-sets are returned as multi-hot vectors. In the example below, we retrieve the valid label combinations
 for the first sample in the test set.
 
+
 ```python
-prediction_sets = prediction_regions_obj(significance_level=0.1)
-print(prediction_sets[0])
+prediction_obj = wrapper.predict(X_test)
+prediction_regions = prediction_obj(significance_level=0.1)
+print(prediction_regions[0])
 ```
 
 ```text
@@ -219,11 +212,26 @@ tensor([[0, 0, 0,  ..., 1, 1, 0],
 Equivalent one-liner:
 
 ```python
-prediction_sets = wrapper.predict(X_test)(significance_level=0.1)
+prediction_regions = wrapper.predict(X_test)(significance_level=0.1)
 ```
 
 ~~~{Note}
-**On-the-fly Updates**: Update diastance measure and penalty weights on-the-fly and predict again.
+**Optional Non-empty Prediction Regions**: The `predict` method returns a `PredictionRegions` container holding the p-values and all candidate
+label-set combinations for each test sample. By default, this container ensures non-empty prediction regions
+by including the label-set with the highest p-value whenever no label-set satisfies the selected significance threshold.
+This behavior is controlled through the `non_empty_prediction_regions` property of the returned
+`PredictionRegions` object, which is set to `True` by default. Users can disable it by setting this
+property to `False` before extracting prediction regions.
+
+```python
+prediction_obj.non_empty_prediction_regions = False
+prediction_regions = prediction_obj(significance_level=0.1)
+```
+~~~
+
+
+~~~{Note}
+**On-the-fly Updates**: Update the distance measure and penalty weights on-the-fly and predict again.
 The predictor will automatically apply the pending updates and recalibrate the scores before generating
 the new predictions.
 
@@ -232,16 +240,17 @@ wrapper.measure = 'norm'
 wrapper.weight_hamming = 1.0
 wrapper.weight_cardinality = 0.5
 new_prediction_obj = wrapper.predict(X_test)
-new_prediction_sets = new_prediction_obj(significance_level=0.1)
+new_prediction_regions = new_prediction_obj(significance_level=0.1)
 ```
 ~~~
+
 
 ~~~{Note}
 **Accessing P-Values**: You also have direct access to the raw p-values for every possible label combination.
 Below, we print the p-values for the first test sample.
 
 ```python
-print(prediction_regions_obj.p_values[0])
+print(prediction_obj.p_values[0])
 ```
 
 ```text
@@ -255,11 +264,11 @@ N-Criterion, S-Criterion, Observed Fuzziness and Observed Excess. Additionally, 
 corresponding to the true labels.
 
 ##### Arguments
-The method requires the **ground truth labels** ('true_labelsets') and the desired **significance level**.
+The method requires the **ground truth label-sets** (`true_labelsets`) and the desired **significance level**.
 All other metric-specific arguments are optional boolean flags, which default to `True` if not specified.
 
 ```python
-metrics = prediction_regions_obj.evaluate(
+metrics = prediction_obj.evaluate(
     return_true_label_p_value = False,
     return_coverage=True,
     return_n_criterion=True,
@@ -285,14 +294,14 @@ print(metrics)
 
 ## Alternative usage
 You can also use the InductiveConformalPredictor class as a standalone engine if you prefer to manage the underlying
-classifier yourself or not using Scikit-Learn. In this mode, you must provide the **predicted probabilities** for the
+classifier yourself or use a framework other than Scikit-Learn. In this mode, you must provide the **predicted probabilities** for the
 proper training, calibration, and test sets, as well as the **ground truth labels** for the training and calibration sets.
 
 The package is flexible regarding input formats: it accepts PyTorch Tensors, NumPy arrays, Pandas DataFrames/Series,
 or lists. All data is automatically converted to tensors and moved to the specified device (CPU or GPU) for 
 efficient processing.
 
-1. ### Initialization
+### 1. Initialization
 First, we need to initialize the InductiveConformalPredictor class to calculate the structural penalties and to form
 the covariance matrix using the proper training data.
 
@@ -309,12 +318,12 @@ icp = InductiveConformalPredictor(
 )
 ```
 
-2. ### Calibration
+### 2. Calibration
 Next, we call the `calibrate` method to calculate the calibration scores based on the calibration probabilities
 and labels.
 
 ```python
-icp.calibrate(probabilities=calib_probs,labels=calib_labels)
+icp.calibrate(probabilities=calib_probs, labels=calib_labels)
 ```
 
 
@@ -322,12 +331,11 @@ icp.calibrate(probabilities=calib_probs,labels=calib_labels)
 **On-the-fly Updates**: You can update the distance `measure` ('norm' or 'mahalanobis'), `weight_hamming`,
 and `weight_cardinality` at any time after the calibration process.
 
-The predictor utilizes lazy evaluation for automatic recalibration. This means
-you do not need to manually pass your calibration data again or explicitly call
-`calibrate()`. Simply assign new values to the properties (e.g., `icp.measure = 'norm'`,
-`icp.weight_hamming = 2.0`, `icp.weight_cardinality = 1.5`) and immediately call `calibrate()`. It will
-automatically reform the underlying covariance matrix and recalibrate the scores
-on-the-fly.
+The predictor utilizes lazy evaluation for recalibration. This means that, after the initial calibration,
+you do not need to pass the calibration data again. Simply assign new values to the properties
+(e.g., `icp.measure = 'norm'`, `icp.weight_hamming = 2.0`, `icp.weight_cardinality = 1.5`)
+and call `calibrate()` without arguments. The predictor will use the cached calibration data and
+recalculate only the components required by the updated configuration.
 
 1. The `calibrate` method recalculates the distance matrix and scores after a measure update.
 ```python
@@ -353,25 +361,20 @@ icp.calibrate()
 ~~~
 
 
-3. ### Predict Valid Conformal Regions
-We generate prediction regions for the test set using the predict method.
-
-```python
-prediction_regions_obj = icp.predict(test_probs)
-```
-
-The predict method returns a PredictionRegions container holding the conformal prediction regions for each sample.
-By default, the predictor guarantees non-empty prediction sets by always including the label-set with the highest p-value.
-You can switch this behavior using the `non_empty_prediction_regions` boolean parameter (default `True`).
-You can query this object to extract valid label sets at a specific significance level
+### 3. Predict Valid Conformal Regions
+We generate prediction regions for the test set by calling the `predict` method and passing the test
+probabilities. You can query this object to
+extract valid label-sets at a specific significance level
 (e.g., $\alpha=0.1$ for 90% confidence) or multiple levels (e.g., $\alpha=[0.05, 0.1, 0.2]$).
+The label-sets are returned as multi-hot vectors.
 
-The label-sets are returned as multi-hot vectors. In the example below, we retrieve the valid label combinations
-for the first sample in the test set.
+In the example below, we retrieve the valid label combinations for the first sample in the test set.
+
 
 ```python
-prediction_sets = prediction_regions_obj(significance_level=0.1)
-print(prediction_sets[0])
+prediction_obj = icp.predict(test_probs)
+prediction_regions = prediction_obj(significance_level=0.1)
+print(prediction_regions[0])
 ```
 
 ```text
@@ -387,11 +390,38 @@ tensor([[0, 0, 0,  ..., 1, 1, 0],
 Equivalent one-liner:
 
 ```python
-prediction_sets = icp.predict(test_probs)(significance_level=0.1)
+prediction_regions = icp.predict(test_probs)(significance_level=0.1)
 ```
 
+And of course, we have access to the p-values. In the example below, we get the p-values of the first sample in the
+test set.
+
+```python
+print(prediction_obj.p_values[0])
+```
+
+```text
+tensor([0.0627, 0.0015, 0.0719,  ..., 0.0015, 0.0015, 0.0015])
+```
+
+
 ~~~{Note}
-**On-the-fly Updates**: Update diastance measure and penalty weights on-the-fly and predict again.
+**Optional Non-empty Prediction Regions**: The `predict` method returns a `PredictionRegions` container holding the p-values and all candidate
+label-set combinations for each test sample. By default, this container ensures non-empty prediction regions
+by including the label-set with the highest p-value whenever no label-set satisfies the selected significance threshold.
+This behavior is controlled through the `non_empty_prediction_regions` property of the returned
+`PredictionRegions` object, which is set to `True` by default. Users can disable it by setting this
+property to `False` before extracting prediction regions.
+
+```python
+prediction_obj.non_empty_prediction_regions = False
+prediction_regions = prediction_obj(significance_level=0.1)
+```
+~~~
+
+
+~~~{Note}
+**On-the-fly Updates**: Update the distance measure and penalty weights on-the-fly and predict again.
 The predictor will automatically apply the pending updates and recalibrate the scores before generating
 the new predictions.
 
@@ -400,7 +430,7 @@ icp.measure = 'norm'
 icp.weight_hamming = 2.0
 icp.weight_cardinality = 1.5
 new_prediction_obj = icp.predict(test_probs)
-new_prediction_sets = new_prediction_obj(significance_level=0.1)
+new_prediction_regions = new_prediction_obj(significance_level=0.1)
 ```
 ~~~
 
@@ -410,7 +440,7 @@ new_prediction_sets = new_prediction_obj(significance_level=0.1)
 Below, we print the p-values for the first test sample.
 
 ```python
-print(prediction_regions_obj.p_values[0])
+print(prediction_obj.p_values[0])
 ```
 
 ```text
@@ -418,7 +448,7 @@ tensor([0.0627, 0.0015, 0.0719,  ..., 0.0015, 0.0015, 0.0015])
 ```
 ~~~
 
-4. ### Evaluation Metrics
+### 4. Evaluation Metrics
 The `evaluate` method provides a convenient way to calculate performance metrics, including Coverage, 
 N-Criterion, S-Criterion, Observed Fuzziness and Observed Excess. Additionally, it can return the p-values
 corresponding to the true labels.
@@ -426,11 +456,11 @@ corresponding to the true labels.
 **Arguments**
 
 
-The method requires the **ground truth labels** ('true_labelsets') and the desired **significance level**.
+The method requires the **ground truth label-sets** (`true_labelsets`) and the desired **significance level**.
 All other metric-specific arguments are optional boolean flags, which default to `True` if not specified.
 
 ```python
-metrics = prediction_regions_obj.evaluate(
+metrics = prediction_obj.evaluate(
     return_true_label_p_value = False,
     return_coverage=True,
     return_n_criterion=True,

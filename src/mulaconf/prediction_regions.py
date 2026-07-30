@@ -45,16 +45,35 @@ class PredictionRegions:
     >>> combinations = torch.cartesian_prod(*[torch.tensor([0, 1])] * 5)
     >>> p_values = torch.rand(100, 2**5)
     >>>
-    >>> # 2. Initialize container
-    >>> prediction_regions_obj = PredictionRegions(p_values, combinations)
+    >>> # 2. Initialize container. It includes non-empty prediction regions
+    >>> prediction_obj = PredictionRegions(p_values, combinations)
     """
 
-    def __init__(self, p_values: torch.Tensor, combinations: torch.Tensor, non_empty_prediction_regions:bool=True):
+    def __init__(self, p_values: torch.Tensor, combinations: torch.Tensor, non_empty_prediction_regions=True):
         self.device = p_values.device
         self.p_values = p_values
         self.combinations = combinations.to(self.device)
         self.non_empty_prediction_regions = non_empty_prediction_regions
-        self.valid_tuples_size = None
+
+
+    @property
+    def non_empty_prediction_regions(self) -> bool:
+        """
+        Getter for the current non-empty prediction regions flag.
+        """
+
+        return self._non_empty_prediction_regions
+
+    @non_empty_prediction_regions.setter
+    def non_empty_prediction_regions(self, value: bool):
+        """
+        Setter for the current non-empty prediction regions flag.
+        """
+
+        if isinstance(value, bool):
+            self._non_empty_prediction_regions = value
+        else:
+            raise ValueError("non_empty_prediction_regions must be a boolean value")
 
 
     def get_valid_tuples(self, alpha: float) -> List[torch.Tensor]:
@@ -88,7 +107,7 @@ class PredictionRegions:
             mask = batch_p_values > alpha
             row_counts = mask.sum(dim=1)
 
-            if self.non_empty_prediction_regions:
+            if self._non_empty_prediction_regions:
                 empty_mask = (row_counts == 0)
 
                 if empty_mask.any():
@@ -104,7 +123,6 @@ class PredictionRegions:
             flat_predictions = self.combinations[comb_indices]
             chunk_tuples = list(torch.split(flat_predictions.int(), row_counts.cpu().tolist()))
             all_valid_tuples.extend(chunk_tuples)
-            self.valid_tuples_size = len(all_valid_tuples)
 
             del batch_p_values, mask, row_counts, valid_indices, comb_indices, flat_predictions
 
@@ -183,7 +201,7 @@ class PredictionRegions:
 
         for a in alphas:
             if not (0 <= a <= 1):
-                raise ValueError(f"Significance level must be strictly between 0 and 1, got {a}")
+                raise ValueError(f"Significance level must be between 0 and 1, got {a}")
 
         return alphas, is_scalar
 
@@ -219,10 +237,10 @@ class PredictionRegions:
         Example
         --------
         >>> # Scalar alpha
-        >>> prediction_sets_lst = prediction_regions_obj(0.1)
+        >>> prediction_regions_lst = prediction_obj(0.1)
         >>>
         >>> # Multiple alphas
-        >>> prediction_sets_dict = prediction_regions_obj([0.05, 0.1])
+        >>> prediction_regions_dict = prediction_obj([0.05, 0.1])
         """
 
         if significance_level is None:
@@ -265,7 +283,7 @@ class PredictionRegions:
         Parameters
         ----------
         return_true_label_p_value : bool, default=True
-            Whether to return the p-values of the true class (requires `true labelsets`).
+            Whether to return the p-values of the true label-set (requires `true labelsets`).
         return_coverage : bool, default=True
             Whether to calculate empirical coverage (requires `true labelsets` and `significance_level`).
         return_n_criterion : bool, default=True
@@ -318,10 +336,10 @@ class PredictionRegions:
         >>> y_test = torch.rand(10, 5)
         >>>
         >>> # Evaluate specific alpha
-        >>> metrics = prediction_regions_obj.evaluate(true_labelsets=y_test, significance_level=0.1)
+        >>> metrics = prediction_obj.evaluate(true_labelsets=y_test, significance_level=0.1)
         >>>
         >>> # Evaluate multiple alphas
-        >>> metrics_multi = prediction_regions_obj.evaluate(true_labelsets=y_test, significance_level=[0.05, 0.1])
+        >>> metrics_multi = prediction_obj.evaluate(true_labelsets=y_test, significance_level=[0.05, 0.1])
         """
 
         if true_labelsets is None and significance_level is None:
@@ -349,16 +367,14 @@ class PredictionRegions:
             def _evaluate_metrics(alpha):
                 out = {}
                 if return_true_label_p_value:
-                    out['true_labels_p_values'] = true_labelsets_p_values
+                    out['true_labelsets_p_values'] = true_labelsets_p_values
 
-                if return_coverage:
-                    out['coverage'] = (true_labelsets_p_values > alpha).float().mean().item()
-
-                if return_n_criterion or return_observed_excess:
+                if return_coverage or return_n_criterion or return_observed_excess:
                     n_samples, n_combinations = self.p_values.shape
                     batch_size = max(1, constants._REGION_BATCH_SIZE // n_combinations)
                     total_sizes = 0
                     total_excess = 0
+                    total_covered = 0
 
                     for i in range(0, n_samples, batch_size):
                         batch_p_values = self.p_values[i: i + batch_size]
@@ -367,7 +383,7 @@ class PredictionRegions:
                         mask = batch_p_values > alpha
                         counts = mask.sum(dim=1)
 
-                        if self.non_empty_prediction_regions:
+                        if self._non_empty_prediction_regions:
                             empty_mask = (counts == 0)
                             if empty_mask.any():
                                 max_indices = batch_p_values.argmax(dim=1)
@@ -376,11 +392,18 @@ class PredictionRegions:
 
                         total_sizes += counts.sum().item()
 
+                        if return_coverage or return_observed_excess:
+                            true_label_in_set = mask[torch.arange(len(batch_p_values), device=self.device),batch_true_indices].int()
+
+                        if return_coverage:
+                            total_covered += true_label_in_set.sum().item()
+
                         if return_observed_excess:
-                            true_label_in_set = mask[torch.arange(len(batch_p_values)), batch_true_indices].int()
                             excess = counts - true_label_in_set
                             total_excess += excess.sum().item()
 
+                    if return_coverage:
+                        out['coverage'] = total_covered / n_samples
                     if return_n_criterion:
                         out['n_criterion'] = total_sizes / n_samples
                     if return_observed_excess:
@@ -406,6 +429,6 @@ class PredictionRegions:
             if return_true_label_p_value: out['true_labelsets_p_values'] = true_labelsets_p_values
             if return_s_criterion: out['s_criterion'] = self.p_values.sum(dim=1).mean().item()
 
-            if return_coverage or return_n_criterion:
+            if return_coverage or return_n_criterion or return_observed_excess:
                 warnings.warn("Coverage/N-criterion require a significance_level.", RuntimeWarning)
             return out

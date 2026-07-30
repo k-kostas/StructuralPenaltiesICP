@@ -487,7 +487,7 @@ class ICPWrapper:
         return self
 
 
-    def predict(self, test_features: InputData, non_empty_prediction_regions:bool = True) -> PredictionRegions:
+    def predict(self, test_features: InputData) -> PredictionRegions:
         """
         Generates conformal prediction regions for the input features.
 
@@ -497,15 +497,16 @@ class ICPWrapper:
         ----------
         test_features : array-like
             The test features. Shape: (t_samples, w_features).
-        non_empty_prediction_regions : bool, optional
-            If True (default), the combination with the highest p-value is returned to ensure non-empty predictions.
 
 
         Returns
         -------
         PredictionRegions
-            A callable object that returns prediction regions. You must call this object
-            with a specific ``significance_level`` to retrieve the final prediction sets.
+            A callable object that wraps the p-values and label-set combinations.
+            The object can be called with a specific ``significance_level`` to extract prediction regions.
+            It also exposes the ``non_empty_prediction_regions`` property, which controls whether
+            empty prediction regions are corrected by adding the maximum-p-value label-set.
+
 
         Raises
         ------
@@ -522,12 +523,12 @@ class ICPWrapper:
         >>> # ... Assume wrapper is already fitted and calibrated (see fit() for details) ...
         >>> X_test = np.random.rand(10, 5)
         >>>
-        >>> # 1. Get prediction regions object with non empty prediction regions
-        >>> prediction_region_obj = wrapper.predict(X_test)
+        >>> # 1. Get a PredictionRegions object. By default, non-empty prediction regions are enabled.
+        >>> prediction_obj = wrapper.predict(X_test)
         >>>
         >>> # 2. Extract Prediction Sets (e.g., at 10% significance / 90% confidence)
         >>> # Returns a list of Tensors, where each Tensor contains the indices of predicted labels.
-        >>> prediction_sets = prediction_region_obj(significance_level=0.1)
+        >>> prediction_regions = prediction_obj(significance_level=0.1)
 
 
         .. note::
@@ -535,7 +536,7 @@ class ICPWrapper:
             ``PredictionRegions`` object, you can chain the operations to evaluate
             the test features and extract prediction sets in a single line of code:
 
-            >>> prediction_sets = wrapper.predict(test_features)(significance_level=0.1)
+            >>> prediction_regions = wrapper.predict(test_features)(significance_level=0.1)
 
 
         .. note::
@@ -546,7 +547,18 @@ class ICPWrapper:
             >>> wrapper.weight_hamming = 2.0
             >>> wrapper.weight_cardinality = 1.5
             >>> updated_obj = wrapper.predict(X_test)
-            >>> updated_sets = updated_obj(significance_level=0.1)
+            >>> updated_regions = updated_obj(significance_level=0.1)
+
+
+        .. note::
+            The returned ``PredictionRegions`` object controls whether prediction regions can be empty
+            through its ``non_empty_prediction_regions`` property. If ``True`` (the default), the object
+            includes the label-set with the highest p-value whenever no label-set satisfies the selected
+            significance threshold. This correction can be disabled before extracting prediction regions.
+
+            >>> prediction_obj = wrapper.predict(test_features)
+            >>> prediction_obj.non_empty_prediction_regions = False
+            >>> prediction_regions = prediction_obj(significance_level=0.1)
         """
 
         print("--- Starting Prediction ---")
@@ -570,4 +582,4 @@ class ICPWrapper:
         test_probabilities = self.predict_proba_to_tensor(test_features).to(self.device)
         print("---The object of PredictionRegions class is called.---\n")
 
-        return self.icp.predict(test_probabilities, non_empty_prediction_regions)
+        return self.icp.predict(test_probabilities)

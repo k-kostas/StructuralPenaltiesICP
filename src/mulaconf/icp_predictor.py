@@ -685,7 +685,7 @@ class InductiveConformalPredictor:
 
 
     @torch.no_grad()
-    def predict(self, probabilities: InputData, non_empty_prediction_regions:bool = True) -> PredictionRegions:
+    def predict(self, probabilities: InputData) -> PredictionRegions:
         """
         Computes p-values for the test samples.
 
@@ -698,16 +698,15 @@ class InductiveConformalPredictor:
         probabilities : Union[torch.Tensor, np.ndarray, list, pd.DataFrame, pd.Series]
             Predicted probabilities for the test set.
             Shape: (t_samples, c_classes).
-        non_empty_prediction_regions : bool, optional
-            If True (default), the combination with the highest p-value is returned to ensure non-empty predictions.
 
 
         Returns
         -------
         PredictionRegions
-            A callable object that wraps the p-values and combinations.
-            You must call this object with a significance level to get the actual prediction sets.
-
+            A callable object that wraps the p-values and label-set combinations.
+            The object can be called with a significance level to extract prediction regions.
+            It also exposes the ``non_empty_prediction_regions`` property, which controls whether
+            empty prediction regions are corrected by adding the maximum-p-value label-set.
 
         Raises
         ------
@@ -725,17 +724,17 @@ class InductiveConformalPredictor:
         >>> # Generate dummy test probabilities
         >>> test_probs = torch.rand(30, 5)
         >>>
-        >>> # Get prediction regions object with non empty prediction regions
+        >>> # Get a PredictionRegions object. By default, non-empty prediction regions are enabled.
         >>> prediction_obj = icp.predict(test_probs)
         >>>
         >>> # Extract prediction sets for significance level 0.1 (90% confidence)
-        >>> prediction_sets = prediction_obj(significance_level=0.1)
+        >>> prediction_regions = prediction_obj(significance_level=0.1)
 
         .. note::
             **Equivalent Syntax**: Because the predictor itself is callable and it returns a callable
             ``PredictionRegions`` object, you can chain the operations to extract prediction sets in a single line of code:
 
-            >>> prediction_sets = icp.predict(test_probs)(significance_level=0.1)
+            >>> prediction_regions = icp.predict(test_probs)(significance_level=0.1)
 
 
         .. note::
@@ -746,8 +745,17 @@ class InductiveConformalPredictor:
             >>> icp.weight_hamming = 1.0
             >>> icp.weight_cardinality = 0.5
             >>> new_prediction_obj = icp.predict(test_probs)
-            >>> new_prediction_sets = new_prediction_obj(significance_level=0.1)
+            >>> new_prediction_regions = new_prediction_obj(significance_level=0.1)
 
+        .. note::
+            The returned ``PredictionRegions`` object controls whether prediction regions can be empty
+            through its ``non_empty_prediction_regions`` property. If ``True`` (the default), the object
+            includes the label-set with the highest p-value whenever no label-set satisfies the selected
+            significance threshold. This correction can be disabled before extracting prediction regions.
+
+            >>> prediction_obj = icp.predict(test_probs)
+            >>> prediction_obj.non_empty_prediction_regions = False
+            >>> prediction_regions = prediction_obj(significance_level=0.1)
         """
 
         if getattr(self, '_update_measure', False):
@@ -797,6 +805,6 @@ class InductiveConformalPredictor:
         if torch.cuda.is_available() and constants._EMPTY_CUDA_CACHE:
             torch.cuda.empty_cache()
 
-        return PredictionRegions(final_p_values, self.combinations, non_empty_prediction_regions)
+        return PredictionRegions(final_p_values, self.combinations)
 
     __call__ = predict
