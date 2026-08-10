@@ -1,3 +1,4 @@
+import logging
 import torch
 import numpy as np
 import pandas as pd
@@ -13,6 +14,8 @@ from mulaconf.prediction_regions import PredictionRegions
 from mulaconf.utils import _check_multihot_labels, _fingerprint_model, _normalize_device, _is_tensor
 
 InputData = Union[torch.Tensor, np.ndarray, pd.DataFrame, pd.Series, List, float]
+
+logger = logging.getLogger(__name__)
 
 
 class ICPWrapper:
@@ -295,7 +298,7 @@ class ICPWrapper:
             >>> wrapper.fit(X_train, y_train, **args)
         """
 
-        print("--- Starting Fit Procedure ---")
+        logger.info("Starting fit procedure...")
         if train_features is not None and train_labels is not None:
             train_labels = _check_multihot_labels(train_labels)
             if torch.is_tensor(train_labels):
@@ -317,7 +320,7 @@ class ICPWrapper:
         else:
             self.kwargs = {}
 
-        print("Fitting Classifier...")
+        logger.info("Fitting classifier...")
         self.strategy.fit(train_features, train_labels)
 
         self.strategy_fingerprint = _fingerprint_model(self.strategy, self.kwargs)
@@ -333,8 +336,8 @@ class ICPWrapper:
             device=self.device
         )
 
-        print(f"Classifier trained with features shape: {train_features.shape}")
-        print("--- Fit Complete ---\n")
+        logger.info("Classifier trained with features shape: %s", train_features.shape)
+        logger.info("Fit complete.")
 
         return self
 
@@ -420,7 +423,7 @@ class ICPWrapper:
             >>> wrapper.calibrate()
         """
 
-        print("--- Starting Calibration ---")
+        logger.info("Starting calibration...")
 
         if self.proper_train_features is None or self.proper_train_labels is None:
             raise RuntimeError("Run the fit() procedure first. Proper training data is missing.")
@@ -432,13 +435,13 @@ class ICPWrapper:
                 raise RuntimeError("No cached calibration data. Please provide calib_features and calib_labels first.")
 
             if not self.has_pending_updates:
-                print("No updates detected. Predictor is already calibrated.")
+                logger.info("No updates detected. Predictor is already calibrated.")
                 return self
 
-            print("Pending updates detected. Recalibrating on cached data...")
+            logger.info("Pending updates detected. Recalibrating on cached data...")
 
             self.icp.calibrate()
-            print("--- Calibration Complete ---\n")
+            logger.info("Calibration complete.")
             return self
 
         if calib_features is not None and calib_labels is not None:
@@ -460,7 +463,7 @@ class ICPWrapper:
 
         if not is_fitted or self.strategy_fingerprint is None or self.strategy_fingerprint != _fingerprint_model(
                 self.strategy, self.kwargs):
-            print("Classifier model change detected. Retraining the classifier...")
+            logger.info("Classifier model change detected. Retraining the classifier...")
             try:
                 self.strategy.fit(self.proper_train_features, self.proper_train_labels)
                 check_is_fitted(self.strategy)
@@ -482,7 +485,7 @@ class ICPWrapper:
 
         self.icp.calibrate(self.predict_proba_to_tensor(calib_features).to(self.device),
                            _is_tensor(calib_labels).to(self.device))
-        print("--- Calibration Complete ---\n")
+        logger.info("Calibration complete.")
 
         return self
 
@@ -561,7 +564,7 @@ class ICPWrapper:
             >>> prediction_regions = prediction_obj(significance_level=0.1)
         """
 
-        print("--- Starting Prediction ---")
+        logger.info("Starting prediction...")
         if self.icp is None:
             raise RuntimeError("Run the calibrate() procedure first.")
 
@@ -580,6 +583,6 @@ class ICPWrapper:
             test_features = check_array(test_features, accept_sparse=True, dtype=None, ensure_2d=True)
 
         test_probabilities = self.predict_proba_to_tensor(test_features).to(self.device)
-        print("---The object of PredictionRegions class is called.---\n")
+        logger.debug("Returning PredictionRegions object.")
 
         return self.icp.predict(test_probabilities)

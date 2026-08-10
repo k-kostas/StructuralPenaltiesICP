@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import pandas as pd
 import torch
@@ -11,6 +12,8 @@ from . import constants
 InputData = Union[torch.Tensor, np.ndarray, list, pd.DataFrame, pd.Series]
 
 from sklearn.covariance import ledoit_wolf
+
+logger = logging.getLogger(__name__)
 
 class InductiveConformalPredictor:
     """
@@ -124,7 +127,7 @@ class InductiveConformalPredictor:
                  device: Union[str, torch.device] = 'cpu',
                  ):
 
-        print(f'\nInitializing Inductive Conformal Predictor')
+        logger.info("Initializing Inductive Conformal Predictor")
 
         self.device = _normalize_device(device)
 
@@ -197,7 +200,7 @@ class InductiveConformalPredictor:
             self.matrix_power_parameter = -1.0 if self._measure == 'mahalanobis' else 0.0
 
             self._update_measure = True
-            print(f"Measure changed to '{cleaned_value}'. Flagged for recalibration.")
+            logger.info("Measure changed to '%s'. Flagged for recalibration.", cleaned_value)
 
 
     @property
@@ -232,17 +235,17 @@ class InductiveConformalPredictor:
             raise ValueError("Hamming penalty weight cannot be negative.")
 
         if self._weight_hamming != value:
-            print(f'\n---Updating weight for Hamming penalties---')
+            logger.info("Updating weight for Hamming penalties")
             if self._weight_hamming == 0 and value > 0:
                 self._weight_hamming = value
                 self._update_weight_hamming = True
                 self.hamming_penalties_preprocessing(self.proper_train_labels)
-                print(f"Hamming penalty weight updated to {value}.")
-                print(f'Hamming penalties recalculated.')
+                logger.info("Hamming penalty weight updated to %s.", value)
+                logger.info("Hamming penalties recalculated.")
             else:
                 self._weight_hamming = value
                 self._update_weight_hamming = True
-                print(f"Hamming penalty weight updated to {value}.")
+                logger.info("Hamming penalty weight updated to %s.", value)
 
 
     @property
@@ -276,17 +279,17 @@ class InductiveConformalPredictor:
             raise ValueError("Cardinality penalty weight cannot be negative.")
 
         if self._weight_cardinality != value:
-            print(f'\n---Updating weight for Cardinality penalties---')
+            logger.info("Updating weight for Cardinality penalties")
             if self._weight_cardinality == 0 and value > 0:
                 self._weight_cardinality = value
                 self._update_weight_cardinality = True
                 self.cardinality_penalties_preprocessing(self.proper_train_labels)
-                print(f"Cardinality penalty weight updated to {value}.")
-                print(f'Cardinality penalties recalculated.')
+                logger.info("Cardinality penalty weight updated to %s.", value)
+                logger.info("Cardinality penalties recalculated.")
             else:
                 self._weight_cardinality = value
                 self._update_weight_cardinality = True
-                print(f"Cardinality penalty weight updated to {value}.")
+                logger.info("Cardinality penalty weight updated to %s.", value)
 
 
     @torch.no_grad()
@@ -348,7 +351,7 @@ class InductiveConformalPredictor:
             torch.cuda.empty_cache()
 
         self._hamming_penalties = torch.cat(min_distances_list)
-        print("Hamming penalties calculated with shape:", self._hamming_penalties.shape)
+        logger.debug("Hamming penalties calculated with shape: %s", self._hamming_penalties.shape)
 
 
     @torch.no_grad()
@@ -406,7 +409,7 @@ class InductiveConformalPredictor:
             torch.cuda.empty_cache()
 
         self._cardinality_penalties = torch.cat(penalties_list)
-        print("Cardinality penalties calculated with shape:", self._cardinality_penalties.shape)
+        logger.debug("Cardinality penalties calculated with shape: %s", self._cardinality_penalties.shape)
 
 
     @torch.no_grad()
@@ -474,7 +477,7 @@ class InductiveConformalPredictor:
 
         ones = torch.ones(self.n_classes, device=self.device)
         self._max_distance_score = torch.sqrt(ones @ distance_matrix_abs @ ones).to(device=self.device)
-        print(f"Distance matrix calculated (Measure: {self._measure}) with shape:", self._distance_matrix.shape)
+        logger.debug("Distance matrix calculated (measure: %s) with shape: %s", self._measure, self._distance_matrix.shape)
 
 
     def _update_calibration_scores(self):
@@ -497,7 +500,7 @@ class InductiveConformalPredictor:
             self.sorted_calibration_scores, _ = torch.sort(calibration_scores, descending=True)
             self._update_weight_hamming = False
             self._update_weight_cardinality = False
-            print("Calibration scores calculated with shape:", self.sorted_calibration_scores.shape)
+            logger.debug("Calibration scores calculated with shape: %s", self.sorted_calibration_scores.shape)
         else:
             raise RuntimeError("Calibration scores are not initialized. Call calibrate() first.")
 
@@ -581,7 +584,7 @@ class InductiveConformalPredictor:
             if self.proper_train_probabilities is None or self.proper_train_labels is None:
                 raise RuntimeError("Cannot recalculate distance matrix: Proper training data is missing.")
 
-            print("Applying measure update and recalculating covariance matrix...")
+            logger.info("Applying measure update and recalculating covariance matrix...")
             self.covariance_matrix_preprocessing(self.proper_train_probabilities, self.proper_train_labels)
             self._update_measure = False
             recalculate_distance_scores = True

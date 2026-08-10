@@ -11,7 +11,7 @@ from .icp_predictor import InductiveConformalPredictor
 from .prediction_regions import PredictionRegions
 from . import constants
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "ICPWrapper",

@@ -1,3 +1,4 @@
+import logging
 import torch
 import numpy as np
 import pandas as pd
@@ -8,6 +9,8 @@ from typing import Tuple, List, Dict, Union, Optional
 
 from .utils import _check_multihot_labels, _is_tensor
 from . import constants
+
+logger = logging.getLogger(__name__)
 
 PredictionItem = Union[Tuple[torch.Tensor, float], torch.Tensor]
 SingleAlphaOutput = List[PredictionItem]
@@ -246,7 +249,7 @@ class PredictionRegions:
         if significance_level is None:
             raise ValueError("significance_level must be specified")
         else:
-            print(f'Returning prediction regions for significance level {significance_level}.')
+            logger.info("Returning prediction regions for significance level %s.", significance_level)
 
         alphas, is_scalar = self._parse_significance_level(significance_level)
 
