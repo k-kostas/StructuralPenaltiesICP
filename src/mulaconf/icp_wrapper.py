@@ -539,7 +539,7 @@ class ICPWrapper:
             ``PredictionRegions`` object, you can chain the operations to evaluate
             the test features and extract prediction sets in a single line of code:
 
-            >>> prediction_regions = wrapper.predict(test_features)(significance_level=0.1)
+            >>> prediction_regions = wrapper.predict(X_test)(significance_level=0.1)
 
 
         .. note::
@@ -559,7 +559,7 @@ class ICPWrapper:
             includes the label-set with the highest p-value whenever no label-set satisfies the selected
             significance threshold. This correction can be disabled before extracting prediction regions.
 
-            >>> prediction_obj = wrapper.predict(test_features)
+            >>> prediction_obj = wrapper.predict(X_test)
             >>> prediction_obj.non_empty_prediction_regions = False
             >>> prediction_regions = prediction_obj(significance_level=0.1)
         """
